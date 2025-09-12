@@ -10,6 +10,7 @@ const bcrypt = require('bcryptjs');
 const app = express();
 
 // --- 3. Middlewares ---
+
 app.use(cors({
   origin: 'https://ulisesxxxi31.github.io'
 }));
