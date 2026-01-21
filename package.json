@@ -1,26 +1,19 @@
 {
-  "name": "yes",
+  "name": "ls-api-b1",
   "version": "1.0.0",
   "description": "My awesome API",
-  "main": "index.js",
+  "main": "api/server.js",
   "scripts": {
+    "start": "node api/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "api,pwa"
-  },
-  "keywords": [
-    "api",
-    "pwa"
-  ],
   "author": "DGR",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "mongoose": "^8.18.1",
-    "mongose": "^0.0.2-security"
+    "express": "^4.18.2",
+    "mongoose": "^8.9.5",
+    "dotenv": "^16.4.7"
   }
 }
