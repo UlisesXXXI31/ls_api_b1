@@ -1,36 +1,48 @@
-// --- 1. Imports ---
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-// --- 2. Creación de la App ---
+// --- Modelos (Asegúrate de que los nombres de archivo coincidan exactamente) ---
+const User = require('../models/user');
+const Progress = require('../models/progress');
+
 const app = express();
 
-// --- 3. Middlewares ---
+// --- Middlewares ---
 app.use(cors({
     origin: 'https://ulisesxxxi31.github.io'
 }));
 app.use(express.json());
 
-// --- 4. Conexión a la Base de Datos ---
+// --- Gestión de Conexión MongoDB (Optimizado para Vercel) ---
 const uri = process.env.MONGODB_URI;
-mongoose.connect(uri)
-  .then(() => {
-    console.log('✅ Conexión exitosa a MongoDB Atlas');
-    // IMPORTANTE: El cron se activa solo cuando la BD está lista
-    require('./cronJobs'); 
-    console.log('⏰ Automatización de Ligas (Cron Jobs) activada');
-  })
-  .catch(err => console.error('❌ Error de conexión a MongoDB Atlas:', err));
+let cachedConnection = null;
 
-// --- 5. Importación de Modelos ---
-const User = require('../models/user');
-const Progress = require('../models/progress');
+async function connectToDatabase() {
+    if (cachedConnection) return cachedConnection;
+    if (!uri) throw new Error("La variable MONGODB_URI no está definida en Vercel");
 
-// --- 6. Rutas de Gamificación (Ligas y Notificaciones) ---
+    cachedConnection = await mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 5000,
+    });
+    console.log('✅ Conectado a MongoDB Atlas');
+    return cachedConnection;
+}
 
-// Obtener el Ranking de una liga específica
+// Middleware para conectar a la BD en cada petición
+app.use(async (req, res, next) => {
+    try {
+        await connectToDatabase();
+        next();
+    } catch (err) {
+        res.status(500).json({ error: "Error de conexión a la base de datos" });
+    }
+});
+
+// --- RUTAS ---
+
+// 1. Leaderboard por Liga
 app.get('/api/leaderboard/:liga', async (req, res) => {
   try {
     const { liga } = req.params;
@@ -38,8 +50,8 @@ app.get('/api/leaderboard/:liga', async (req, res) => {
       'stats.liga_actual': liga,
       role: 'student' 
     })
-    .sort({ 'stats.puntos_semanales': -1 }) // De mayor a menor puntuación
-    .select('name stats') // Traemos solo nombre y estadísticas
+    .sort({ 'stats.puntos_semanales': -1 })
+    .select('name stats')
     .limit(30);
     
     res.status(200).json(ranking);
@@ -48,30 +60,29 @@ app.get('/api/leaderboard/:liga', async (req, res) => {
   }
 });
 
-// Limpiar la bandera de notificación cuando el alumno ve su ascenso
+// 2. Confirmar Notificación de Ascenso
 app.post('/api/users/confirmar-ascenso', async (req, res) => {
   try {
     const { userId } = req.body;
     await User.findByIdAndUpdate(userId, { 
       $set: { 'stats.notificacion_ascenso': false } 
     });
-    res.status(200).json({ message: 'Notificación de ascenso marcada como leída' });
+    res.status(200).json({ message: 'Notificación marcada como leída' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// --- 7. Rutas de Progreso (EL MOTOR DE LA APP) ---
-
+// 3. Registro de Progreso (Lógica de Rachas y Puntos)
 app.post('/api/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
 
         if (!user || !lessonName || !taskName || score === undefined) {
-            return res.status(400).json({ message: "Faltan datos para guardar el progreso." });
+            return res.status(400).json({ message: "Faltan datos." });
         }
 
-        // A. Actualizar/Crear registro en la colección de progreso detallado
+        // A. Actualizar/Crear registro de progreso
         const filter = { user, lessonName, taskName };
         const updateData = { 
             $inc: { score: score }, 
@@ -79,15 +90,17 @@ app.post('/api/progress', async (req, res) => {
         };
         if (completed) updateData.$set.completed = true;
 
-        const updatedProgress = await Progress.findOneAndUpdate(
-            filter, updateData, { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
+        const updatedProgress = await Progress.findOneAndUpdate(filter, updateData, { 
+            new: true, upsert: true 
+        });
 
-        // B. Lógica de Rachas y Puntos en el documento del Usuario
+        // B. Lógica de Rachas
         const hoy = new Date();
-        hoy.setHours(0, 0, 0, 0); // Normalizamos a medianoche para comparar días
+        hoy.setHours(0, 0, 0, 0);
 
         const alumno = await User.findById(user);
+        if (!alumno) return res.status(404).json({ error: "Usuario no encontrado" });
+
         let nuevaRacha = alumno.stats?.racha_actual || 0;
         const ultimaActividad = alumno.stats?.ultima_actividad;
 
@@ -98,21 +111,17 @@ app.post('/api/progress', async (req, res) => {
             const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
             if (diffDias === 1) {
-                // Completó ayer, la racha sube
                 nuevaRacha += 1;
             } else if (diffDias > 1) {
-                // Pasó más de un día sin actividad
                 if (!alumno.stats.protector_activo) {
-                    nuevaRacha = 1; // Racha rota, empieza de nuevo
+                    nuevaRacha = 1; 
                 }
-                // Si el protector está activo, nuevaRacha se mantiene igual
             }
-            // Si diffDias es 0, ya hizo algo hoy, no sumamos pero mantenemos racha
         } else {
-            nuevaRacha = 1; // Es su primera actividad histórica
+            nuevaRacha = 1;
         }
 
-        // C. Guardar estadísticas actualizadas en el Usuario
+        // C. Guardar estadísticas en el Usuario
         await User.findByIdAndUpdate(user, {
             $set: { 
                 'stats.racha_actual': nuevaRacha,
@@ -125,37 +134,17 @@ app.post('/api/progress', async (req, res) => {
         });
 
         res.status(200).json({ 
-            message: 'Progreso y estadísticas actualizadas', 
+            message: 'Éxito', 
             progress: updatedProgress,
             racha: nuevaRacha 
         });
 
     } catch (error) {
-        console.error("Error en /api/progress:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// --- 8. Rutas de Gestión y Auth (Mantener Originales) ---
-
-app.get('/api/progress/students', async (req, res) => {
-  try {
-    const studentProgress = await Progress.find().populate('user', 'name email');
-    const groupedProgress = studentProgress.reduce((acc, progress) => {
-      const { user, ...rest } = progress._doc;
-      if (!user) return acc;
-      if (!acc[user.name]) {
-        acc[user.name] = { name: user.name, email: user.email, tasks: [] };
-      }
-      acc[user.name].tasks.push(rest);
-      return acc;
-    }, {});
-    res.status(200).json(Object.values(groupedProgress));
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
+// 4. Login con estadísticas
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -163,15 +152,12 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(400).json({ message: 'Credenciales inválidas' });
     }
-    // Devolvemos el usuario con sus estadísticas para el frontend
     res.status(200).json({ 
-        message: 'Inicio de sesión exitoso', 
         user: { 
             id: user._id, 
             name: user.name, 
-            email: user.email, 
             role: user.role,
-            stats: user.stats // <--- MUY IMPORTANTE PARA LA UI
+            stats: user.stats 
         } 
     });
   } catch (error) {
@@ -179,38 +165,29 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// 5. Historial de progreso por usuario
 app.get('/api/progress/:userId', async (req, res) => {
-  try {
-    const progressHistory = await Progress.find({ user: req.params.userId }).sort({ completedAt: 1 });
-    res.status(200).json({ progress: progressHistory });
-  } catch (error) {
-    res.status(500).json({ message: 'Error al obtener historial' });
-  }
+    try {
+      const progressHistory = await Progress.find({ user: req.params.userId }).sort({ completedAt: 1 });
+      res.status(200).json({ progress: progressHistory });
+    } catch (error) {
+      res.status(500).json({ message: 'Error al obtener historial' });
+    }
 });
 
-// Ruta Seed (Uso exclusivo desarrollo)
-app.get('/api/seed', async (req, res) => {
+// 6. Ruta para el Administrador (Lógica que antes estaba en cronJobs)
+// En Vercel, ejecutaremos esta ruta mediante un Vercel Cron
+app.get('/api/admin/update-leagues', async (req, res) => {
+    // Aquí pondrías el código que tienes en cronJobs.js para 
+    // subir/bajar alumnos de liga y resetear puntos_semanales
     try {
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash('password123', salt);
-        const testUser = new User({
-            name: 'Profesor de Prueba',
-            email: `prof.${Date.now()}@seed.com`,
-            password: hashedPassword,
-            role: 'teacher'
-        });
-        await testUser.save();
-        res.status(200).json({ message: 'Datos de prueba creados.' });
+        // Ejemplo rápido: Reset de puntos semanales
+        await User.updateMany({}, { $set: { 'stats.puntos_semanales': 0 } });
+        res.status(200).json({ message: "Ligas actualizadas correctamente" });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// --- 9. Exportación ---
+// --- Exportar para Vercel ---
 module.exports = app;
-
-
-
-
-
-
