@@ -29,7 +29,7 @@ const Progress = require('../models/progress');
 // --- RUTAS ---
 
 // 1. Obtener todos los alumnos (formato para teacher.js)
-app.get('/api/users', async (req, res) => {
+app.get('/users', async (req, res) => {
   try {
     const users = await User.find({ role: 'student' }).select('-password');
     res.status(200).json({ users: users }); 
@@ -37,7 +37,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 // 2. RUTA QUE ESTÁ FALLANDO: Progreso de un alumno específico
-app.get('/api/progress/:userId', async (req, res) => {
+app.get('/progress/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
         // Buscamos todo el progreso de ese ID
@@ -51,7 +51,7 @@ app.get('/api/progress/:userId', async (req, res) => {
 });
 
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
