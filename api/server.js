@@ -53,31 +53,47 @@ app.get('/progress/:userId', async (req, res) => {
 app.post('/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
-        
-        // 1. Guardamos el registro en el historial (esto ya lo hacíamos)
+
+        // Forzamos que el score sea un número entero
+        const puntosAñadir = parseInt(score);
+
+        console.log(`Intentando guardar progreso para el usuario: ${user}`);
+        console.log(`Puntos a añadir: ${puntosAñadir}`);
+
+        // 1. Guardar en el historial (Progress)
         const newProgress = new Progress({
             user,
             lessonName,
             taskName,
-            score,
+            score: puntosAñadir,
             completed,
             completedAt: new Date()
         });
         await newProgress.save();
 
-        // 2. ¡NUEVO! Actualizamos los puntos totales en el perfil del usuario
-        // Buscamos al usuario por su ID y sumamos el score a sus puntos
-        await User.findByIdAndUpdate(user, {
-            $inc: { "stats.points": score } // Suma el score actual a los puntos que ya tenía
-        });
+        // 2. Actualizar el usuario y capturar el resultado
+        // Usamos { new: true } para que nos devuelva el usuario ya actualizado
+        const usuarioActualizado = await User.findByIdAndUpdate(
+            user, 
+            { $inc: { "stats.points": puntosAñadir } }, 
+            { new: true }
+        );
+
+        if (!usuarioActualizado) {
+            console.error("No se encontró el usuario para actualizar puntos");
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        console.log(`Puntos actualizados con éxito. Ahora tiene: ${usuarioActualizado.stats.points}`);
 
         res.status(201).json({ 
-            message: "Progreso guardado y puntos actualizados con éxito",
-            puntosGanados: score 
+            message: "¡Progreso y puntos actualizados!",
+            puntosTotales: usuarioActualizado.stats.points 
         });
+
     } catch (error) {
-        console.error("Error al guardar progreso:", error);
-        res.status(500).json({ error: "Error al guardar el progreso" });
+        console.error("ERROR EN POST /PROGRESS:", error);
+        res.status(500).json({ error: "Error interno al guardar" });
     }
 });
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
