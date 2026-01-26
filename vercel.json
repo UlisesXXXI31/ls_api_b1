@@ -1,12 +1,12 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/server.js" },
-    { "source": "/(.*)", "destination": "/api/server.js" }
+    { "source": "/api/(.*)", "destination": "/server.js" },
+    { "source": "/(.*)", "destination": "/server.js" }
   ],
   "crons": [
     {
-      "path": "/api/cron/reset-ligas",
+      "path": "/cron/reset-ligas",
       "schedule": "0 0 * * 1"
     }
   ]
