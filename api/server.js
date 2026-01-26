@@ -49,11 +49,12 @@ app.get('/progress/:userId', async (req, res) => {
         res.status(500).json({ error: "Error al obtener historial" });
     }
 });
-// NUEVA RUTA: Guardar el progreso del alumno (Para app.js)
+// RUTA ACTUALIZADA: Guarda el progreso Y SUMA los puntos al alumno
 app.post('/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
         
+        // 1. Guardamos el registro en el historial (esto ya lo hacíamos)
         const newProgress = new Progress({
             user,
             lessonName,
@@ -62,15 +63,23 @@ app.post('/progress', async (req, res) => {
             completed,
             completedAt: new Date()
         });
-
         await newProgress.save();
-        res.status(201).json({ message: "Progreso guardado con éxito" });
+
+        // 2. ¡NUEVO! Actualizamos los puntos totales en el perfil del usuario
+        // Buscamos al usuario por su ID y sumamos el score a sus puntos
+        await User.findByIdAndUpdate(user, {
+            $inc: { "stats.points": score } // Suma el score actual a los puntos que ya tenía
+        });
+
+        res.status(201).json({ 
+            message: "Progreso guardado y puntos actualizados con éxito",
+            puntosGanados: score 
+        });
     } catch (error) {
         console.error("Error al guardar progreso:", error);
         res.status(500).json({ error: "Error al guardar el progreso" });
     }
 });
-
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
 app.post('/auth/login', async (req, res) => {
   try {
