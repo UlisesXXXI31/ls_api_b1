@@ -49,6 +49,27 @@ app.get('/progress/:userId', async (req, res) => {
         res.status(500).json({ error: "Error al obtener historial" });
     }
 });
+// NUEVA RUTA: Guardar el progreso del alumno (Para app.js)
+app.post('/progress', async (req, res) => {
+    try {
+        const { user, lessonName, taskName, score, completed } = req.body;
+        
+        const newProgress = new Progress({
+            user,
+            lessonName,
+            taskName,
+            score,
+            completed,
+            completedAt: new Date()
+        });
+
+        await newProgress.save();
+        res.status(201).json({ message: "Progreso guardado con éxito" });
+    } catch (error) {
+        console.error("Error al guardar progreso:", error);
+        res.status(500).json({ error: "Error al guardar el progreso" });
+    }
+});
 
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
 app.post('/auth/login', async (req, res) => {
