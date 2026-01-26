@@ -51,7 +51,7 @@ app.get('/api/progress/:userId', async (req, res) => {
 });
 
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
