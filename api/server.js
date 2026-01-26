@@ -82,4 +82,20 @@ app.post('/auth/login', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Error' }); }
 });
 
+// RUTA: Obtener el Leaderboard (Clasificación)
+app.get('/leaderboard', async (req, res) => {
+    try {
+        // Buscamos a los alumnos, ordenados por sus puntos (de mayor a menor)
+        // Limitamos a los 10 mejores
+        const topStudents = await User.find({ role: 'student' })
+            .select('name stats.points') // Solo traemos nombre y puntos
+            .sort({ 'stats.points': -1 })
+            .limit(10);
+
+        res.status(200).json({ leaderboard: topStudents });
+    } catch (error) {
+        console.error("Error al obtener clasificación:", error);
+        res.status(500).json({ error: "Error al obtener la clasificación" });
+    }
+});
 module.exports = app;
