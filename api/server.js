@@ -53,12 +53,7 @@ app.get('/progress/:userId', async (req, res) => {
 app.post('/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
-
-        // Forzamos que el score sea un número entero
-        const puntosAñadir = parseInt(score);
-
-        console.log(`Intentando guardar progreso para el usuario: ${user}`);
-        console.log(`Puntos a añadir: ${puntosAñadir}`);
+        const puntosAñadir = parseInt(score) || 0;
 
         // 1. Guardar en el historial (Progress)
         const newProgress = new Progress({
@@ -71,31 +66,29 @@ app.post('/progress', async (req, res) => {
         });
         await newProgress.save();
 
-        // 2. Actualizar el usuario y capturar el resultado
-        // Usamos { new: true } para que nos devuelva el usuario ya actualizado
+        // 2. Actualizar el usuario con seguridad
+        // Usamos $set para asegurar que 'stats' existe y luego $inc
         const usuarioActualizado = await User.findByIdAndUpdate(
             user, 
-            { $inc: { "stats.points": puntosAñadir } }, 
-            { new: true }
+            { 
+                $inc: { "stats.points": puntosAñadir },
+                // Esto asegura que si el campo stats no existía, no de error
+                $setOnInsert: { "stats.streak": 0 } 
+            }, 
+            { new: true, upsert: true }
         );
 
-        if (!usuarioActualizado) {
-            console.error("No se encontró el usuario para actualizar puntos");
-            return res.status(404).json({ error: "Usuario no encontrado" });
-        }
-
-        console.log(`Puntos actualizados con éxito. Ahora tiene: ${usuarioActualizado.stats.points}`);
-
         res.status(201).json({ 
-            message: "¡Progreso y puntos actualizados!",
+            message: "¡Puntos guardados!",
             puntosTotales: usuarioActualizado.stats.points 
         });
 
     } catch (error) {
-        console.error("ERROR EN POST /PROGRESS:", error);
-        res.status(500).json({ error: "Error interno al guardar" });
+        console.error("ERROR CRÍTICO EN POST /PROGRESS:", error);
+        res.status(500).json({ error: "Error en el servidor al guardar" });
     }
 });
+
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
 app.post('/auth/login', async (req, res) => {
   try {
