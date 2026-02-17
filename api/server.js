@@ -49,43 +49,55 @@ app.get('/progress/:userId', async (req, res) => {
         res.status(500).json({ error: "Error al obtener historial" });
     }
 });
-// RUTA ACTUALIZADA: Guarda el progreso Y SUMA los puntos al alumno
+// Necesitamos importar los tipos de Mongoose al principio de server.js
+const { ObjectId } = require('mongoose').Types;
+
 app.post('/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
+
+        // 1. VALIDACIÓN: Verificar si el ID es válido
+        if (!mongoose.Types.ObjectId.isValid(user)) {
+            return res.status(400).json({ error: "ID de usuario no válido" });
+        }
+
         const puntosAñadir = parseInt(score) || 0;
 
-        // 1. Guardar en el historial (Progress)
+        // 2. GUARDAR HISTORIAL
         const newProgress = new Progress({
-            user,
+            user: new ObjectId(user), // Convertimos a ObjectId real
             lessonName,
             taskName,
             score: puntosAñadir,
-            completed,
+            completed: !!completed, // Forzamos booleano
             completedAt: new Date()
         });
         await newProgress.save();
 
-        // 2. Actualizar el usuario con seguridad
-        // Usamos $set para asegurar que 'stats' existe y luego $inc
-        const usuarioActualizado = await User.findByIdAndUpdate(
-            user, 
-            { 
-                $inc: { "stats.points": puntosAñadir },
-                // Esto asegura que si el campo stats no existía, no de error
-                $setOnInsert: { "stats.streak": 0 } 
-            }, 
-            { new: true, upsert: true }
+        // 3. ACTUALIZAR PUNTOS DEL USUARIO
+        // Usamos un método más directo para evitar errores de esquema
+        const usuarioActualizado = await User.findOneAndUpdate(
+            { _id: new ObjectId(user) },
+            { $inc: { "stats.points": puntosAñadir } },
+            { new: true, runValidators: false } // Desactivamos validadores por si el esquema es estricto
         );
+
+        if (!usuarioActualizado) {
+            return res.status(404).json({ error: "Usuario no encontrado en la DB" });
+        }
 
         res.status(201).json({ 
             message: "¡Puntos guardados!",
-            puntosTotales: usuarioActualizado.stats.points 
+            puntosTotales: usuarioActualizado.stats ? usuarioActualizado.stats.points : puntosAñadir 
         });
 
     } catch (error) {
-        console.error("ERROR CRÍTICO EN POST /PROGRESS:", error);
-        res.status(500).json({ error: "Error en el servidor al guardar" });
+        // --- ESTO NOS DIRÁ EL ERROR REAL EN LA RESPUESTA ---
+        console.error("DETALLE DEL ERROR:", error);
+        res.status(500).json({ 
+            error: "Error interno al guardar", 
+            detalle: error.message 
+        });
     }
 });
 
