@@ -108,7 +108,7 @@ app.get('/leaderboard', async (req, res) => {
         // Limitamos a los 10 mejores
         const topStudents = await User.find({ role: 'student' })
             .select('name stats.points') // taremos solo el nomnbre y los puntos
-            .sort({ 'stats.points': -1, 'name': 1 })
+            .sort({ 'stats.points': -1 })
             .limit(10);
 
         res.status(200).json({ leaderboard: topStudents });
