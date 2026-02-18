@@ -56,7 +56,7 @@ app.post('/progress', async (req, res) => {
         const { user, score, lessonName, taskName, completed } = req.body;
         const puntosAñadir = parseInt(score) || 0;
 
-        // 1. Guardar registro en el historial (Progress)
+        // 1. Guardar el progreso en el historial
         const nuevoProgreso = new Progress({
             user: new mongoose.Types.ObjectId(user),
             lessonName,
@@ -67,24 +67,29 @@ app.post('/progress', async (req, res) => {
         });
         await nuevoProgreso.save();
 
-        // 2. ACTUALIZAR EL RANKING (Aquí estaba el problema)
-        // Usamos { upsert: true } para que si el alumno no tiene 'stats', lo cree ahora mismo
+        // 2. ACTUALIZAR PUNTOS (Con validación de objeto stats)
         const usuarioActualizado = await User.findByIdAndUpdate(
             user,
-            { $inc: { "stats.points": puntosAñadir } }, // Suma los puntos
-            { new: true, upsert: true, setDefaultsOnInsert: true }
+            { $inc: { "stats.points": puntosAñadir } },
+            { new: true, upsert: true }
         );
+
+        // 3. RESPUESTA SEGURA (Aquí estaba el error)
+        // Verificamos que stats y points existan antes de leerlos
+        const totalXP = (usuarioActualizado.stats && usuarioActualizado.stats.points) 
+                        ? usuarioActualizado.stats.points 
+                        : puntosAñadir;
 
         res.status(201).json({ 
             status: "success", 
-            puntosTotales: usuarioActualizado.stats.points 
+            puntosTotales: totalXP 
         });
+
     } catch (error) {
-        console.error("Error al guardar:", error);
+        console.error("Error en servidor:", error);
         res.status(500).json({ error: "Fallo en el servidor", detalle: error.message });
     }
 });
-
 // 3. Login, Leaderboard y demás (Mantener como estaban antes)
 app.post('/auth/login', async (req, res) => {
   try {
