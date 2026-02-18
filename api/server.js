@@ -56,7 +56,7 @@ app.post('/progress', async (req, res) => {
         const { user, score, lessonName, taskName, completed } = req.body;
         const puntosAñadir = parseInt(score) || 0;
 
-        // 1. Guardamos el historial del examen
+        // 1. Guardar registro en el historial (Progress)
         const nuevoProgreso = new Progress({
             user: new mongoose.Types.ObjectId(user),
             lessonName,
@@ -67,18 +67,21 @@ app.post('/progress', async (req, res) => {
         });
         await nuevoProgreso.save();
 
-        // 2. ACTUALIZAMOS EL RANKING (Aquí estaba el fallo)
-        // Usamos { upsert: true } para que si el alumno no tiene el objeto 'stats', lo cree de cero
+        // 2. ACTUALIZAR EL RANKING (Aquí estaba el problema)
+        // Usamos { upsert: true } para que si el alumno no tiene 'stats', lo cree ahora mismo
         const usuarioActualizado = await User.findByIdAndUpdate(
             user,
-            { $inc: { "stats.points": puntosAñadir } }, // Suma los puntos al total
-            { new: true, upsert: true } 
+            { $inc: { "stats.points": puntosAñadir } }, // Suma los puntos
+            { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
-        res.status(201).json({ message: "Puntos guardados", total: usuarioActualizado.stats.points });
+        res.status(201).json({ 
+            status: "success", 
+            puntosTotales: usuarioActualizado.stats.points 
+        });
     } catch (error) {
-        console.error("Error crítico:", error);
-        res.status(500).json({ error: "Error interno al sumar puntos" });
+        console.error("Error al guardar:", error);
+        res.status(500).json({ error: "Fallo en el servidor", detalle: error.message });
     }
 });
 
