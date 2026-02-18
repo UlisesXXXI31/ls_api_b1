@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-
+const { ObjectId } = require('mongoose').Types;
 const app = express();
 
 app.use(cors({ origin: 'https://ulisesxxxi31.github.io' }));
@@ -49,55 +49,44 @@ app.get('/progress/:userId', async (req, res) => {
         res.status(500).json({ error: "Error al obtener historial" });
     }
 });
-// Necesitamos importar los tipos de Mongoose al principio de server.js
-const { ObjectId } = require('mongoose').Types;
+
 
 app.post('/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
 
-        // 1. VALIDACIÓN: Verificar si el ID es válido
+        // 1. Validar ID
         if (!mongoose.Types.ObjectId.isValid(user)) {
-            return res.status(400).json({ error: "ID de usuario no válido" });
+            return res.status(400).json({ error: "ID de usuario inválido" });
         }
 
-        const puntosAñadir = parseInt(score) || 0;
-
-        // 2. GUARDAR HISTORIAL
-        const newProgress = new Progress({
-            user: new ObjectId(user), // Convertimos a ObjectId real
+        // 2. Guardar el progreso (Historial)
+        const nuevoProgreso = new Progress({
+            user: new ObjectId(user), // Convertimos a objeto real
             lessonName,
             taskName,
-            score: puntosAñadir,
-            completed: !!completed, // Forzamos booleano
+            score: parseInt(score) || 0,
+            completed: !!completed,
             completedAt: new Date()
         });
-        await newProgress.save();
+        await nuevoProgreso.save();
 
-        // 3. ACTUALIZAR PUNTOS DEL USUARIO
-        // Usamos un método más directo para evitar errores de esquema
-        const usuarioActualizado = await User.findOneAndUpdate(
-            { _id: new ObjectId(user) },
-            { $inc: { "stats.points": puntosAñadir } },
-            { new: true, runValidators: false } // Desactivamos validadores por si el esquema es estricto
+        // 3. ACTUALIZAR RANKING (stats.points)
+        // Usamos $inc con upsert para que si 'stats' no existe, lo cree sin dar error
+        const userActualizado = await User.findByIdAndUpdate(
+            user,
+            { $inc: { "stats.points": parseInt(score) || 0 } },
+            { new: true, upsert: true }
         );
 
-        if (!usuarioActualizado) {
-            return res.status(404).json({ error: "Usuario no encontrado en la DB" });
-        }
-
         res.status(201).json({ 
-            message: "¡Puntos guardados!",
-            puntosTotales: usuarioActualizado.stats ? usuarioActualizado.stats.points : puntosAñadir 
+            message: "Puntos guardados", 
+            xpTotal: userActualizado.stats ? userActualizado.stats.points : score 
         });
 
     } catch (error) {
-        // --- ESTO NOS DIRÁ EL ERROR REAL EN LA RESPUESTA ---
-        console.error("DETALLE DEL ERROR:", error);
-        res.status(500).json({ 
-            error: "Error interno al guardar", 
-            detalle: error.message 
-        });
+        console.error("ERROR EN PROGRESO:", error);
+        res.status(500).json({ error: "Error interno", detalle: error.message });
     }
 });
 
