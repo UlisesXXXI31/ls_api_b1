@@ -53,40 +53,32 @@ app.get('/progress/:userId', async (req, res) => {
 
 app.post('/progress', async (req, res) => {
     try {
-        const { user, lessonName, taskName, score, completed } = req.body;
+        const { user, score, lessonName, taskName, completed } = req.body;
+        const puntosAñadir = parseInt(score) || 0;
 
-        // 1. Validar ID
-        if (!mongoose.Types.ObjectId.isValid(user)) {
-            return res.status(400).json({ error: "ID de usuario inválido" });
-        }
-
-        // 2. Guardar el progreso (Historial)
+        // 1. Guardamos el historial del examen
         const nuevoProgreso = new Progress({
-            user: new ObjectId(user), // Convertimos a objeto real
+            user: new mongoose.Types.ObjectId(user),
             lessonName,
             taskName,
-            score: parseInt(score) || 0,
-            completed: !!completed,
+            score: puntosAñadir,
+            completed,
             completedAt: new Date()
         });
         await nuevoProgreso.save();
 
-        // 3. ACTUALIZAR RANKING (stats.points)
-        // Usamos $inc con upsert para que si 'stats' no existe, lo cree sin dar error
-        const userActualizado = await User.findByIdAndUpdate(
+        // 2. ACTUALIZAMOS EL RANKING (Aquí estaba el fallo)
+        // Usamos { upsert: true } para que si el alumno no tiene el objeto 'stats', lo cree de cero
+        const usuarioActualizado = await User.findByIdAndUpdate(
             user,
-            { $inc: { "stats.points": parseInt(score) || 0 } },
-            { new: true, upsert: true }
+            { $inc: { "stats.points": puntosAñadir } }, // Suma los puntos al total
+            { new: true, upsert: true } 
         );
 
-        res.status(201).json({ 
-            message: "Puntos guardados", 
-            xpTotal: userActualizado.stats ? userActualizado.stats.points : score 
-        });
-
+        res.status(201).json({ message: "Puntos guardados", total: usuarioActualizado.stats.points });
     } catch (error) {
-        console.error("ERROR EN PROGRESO:", error);
-        res.status(500).json({ error: "Error interno", detalle: error.message });
+        console.error("Error crítico:", error);
+        res.status(500).json({ error: "Error interno al sumar puntos" });
     }
 });
 
