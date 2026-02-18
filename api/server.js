@@ -107,7 +107,7 @@ app.get('/leaderboard', async (req, res) => {
         // Buscamos a los alumnos, ordenados por sus puntos (de mayor a menor)
         // Limitamos a los 10 mejores
         const topStudents = await User.find({ role: 'student' })
-            .select('name stats') // taremos todo el objeto
+            .select('name stats.points') // taremos solo el nomnbre y los puntos
             .sort({ 'stats.points': -1, 'name': 1 })
             .limit(10);
 
