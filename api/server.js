@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
 });
 
 // --- AUTENTICACIÓN Y REGISTRO ---
-app.post('/api/auth/login', async (req, res) => {
+app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
@@ -40,7 +40,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/users/register', async (req, res) => {
+app.post('/users/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
     const salt = await bcrypt.genSalt(10);
@@ -60,7 +60,7 @@ app.post('/api/users/register', async (req, res) => {
 });
 
 // --- GESTIÓN DE PUNTOS Y PROGRESO (RANKING + HISTORIAL) ---
-app.post('/api/progress', async (req, res) => {
+app.post('/progress', async (req, res) => {
     try {
         const { user, lessonName, taskName, score, completed } = req.body;
         const puntosAñadir = parseInt(score) || 0;
@@ -92,7 +92,7 @@ app.post('/api/progress', async (req, res) => {
 // --- PANEL DEL PROFESOR (RUTAS A2 INTEGRADAS) ---
 
 // Obtener todos los alumnos
-app.get('/api/users', async (req, res) => {
+app.get('/users', async (req, res) => {
   try {
     const users = await User.find({ role: 'student' }).select('-password').sort({ name: 1 });
     res.status(200).json({ users });
@@ -100,7 +100,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 // Historial detallado de un alumno
-app.get('/api/progress/:userId', async (req, res) => {
+app.get('/progress/:userId', async (req, res) => {
   try {
     const progressHistory = await Progress.find({ user: req.params.userId }).sort({ completedAt: -1 });
     res.status(200).json({ progress: progressHistory });
@@ -108,7 +108,7 @@ app.get('/api/progress/:userId', async (req, res) => {
 });
 
 // Leaderboard para el Ranking
-app.get('/api/leaderboard', async (req, res) => {
+app.get('/leaderboard', async (req, res) => {
     try {
         const topStudents = await User.find({ role: 'student' })
             .select('name stats.points')
